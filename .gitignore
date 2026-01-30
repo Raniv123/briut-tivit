@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Environment variables (API keys!)
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Data files (heavy JSON transcripts)
+data/transcripts/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output
+dist/
+build/
+
+# Temp files
+embedded-data-extract.txt
+embedded-data.js
+index-new.html
+index-backup.html
+
+# Scripts with API keys
+scripts/.env
