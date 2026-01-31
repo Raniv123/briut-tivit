@@ -1,0 +1,19 @@
+{
+  "name": "health-qa-scripts",
+  "version": "1.0.0",
+  "description": "Batch transcription and knowledge base builder",
+  "scripts": {
+    "transcribe": "npx ts-node batch-transcribe.ts",
+    "build-kb": "npx ts-node build-knowledge-base.ts"
+  },
+  "dependencies": {
+    "axios": "^1.13.4",
+    "dotenv": "^16.0.0",
+    "form-data": "^4.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
