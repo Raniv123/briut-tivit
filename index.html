@@ -303,6 +303,82 @@
         .mode-card .mode-label { font-weight: 600; color: var(--text); }
 
         .topics-section {
+/* ===== DID YOU KNOW (הידעת?) ===== */
+.did-you-know {
+    max-width: 640px;
+    margin: 2rem auto 1.5rem;
+    padding: 0 1.5rem;
+}
+.dyk-card {
+    background: linear-gradient(135deg, var(--primary-50) 0%, var(--accent-light) 100%);
+    border: 2px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
+}
+.dyk-card::before {
+    content: '💡';
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    font-size: 4rem;
+    opacity: 0.15;
+}
+.dyk-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.dyk-icon {
+    font-size: 1.5rem;
+}
+.dyk-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+}
+.dyk-content {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 1rem;
+    position: relative;
+    z-index: 1;
+}
+.dyk-source {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 0.8rem;
+}
+.dyk-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-start;
+}
+.dyk-refresh {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.dyk-refresh:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+.dyk-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
             max-width: 640px;
             margin: 2rem auto;
             padding: 0 1.5rem;
@@ -1172,6 +1248,24 @@
         </button>
     </div>
     <div class="topics-section">
+<!-- הידעת? - Did You Know Section -->
+<div class="did-you-know" id="didYouKnow">
+    <div class="dyk-card">
+        <div class="dyk-header">
+            <span class="dyk-icon">💡</span>
+            <h3 class="dyk-title">הידעת?</h3>
+        </div>
+        <div class="dyk-content" id="dykContent">
+            טוען עובדה מעניינת...
+        </div>
+        <div class="dyk-source" id="dykSource"></div>
+        <div class="dyk-actions">
+            <button class="dyk-refresh" onclick="refreshDidYouKnow()">
+                🔄 עובדה נוספת
+            </button>
+        </div>
+    </div>
+</div>
         <h3>נושאים מהרצאות</h3>
         <div class="topics-pills" id="topicsPills"></div>
     </div>
@@ -2309,6 +2403,160 @@ function saveSettings() {
         });
     });
 })();
+// ==================== DID YOU KNOW (הידעת?) ====================
+
+// Track user interests based on chat history
+const UserInterests = {
+    topics: [],
+    keywords: [],
+
+    // Analyze user's questions to learn interests
+    analyzeQuestion(question) {
+        const words = question.toLowerCase().split(/\s+/);
+        const topics = new Set();
+
+        // Extract health topics from question
+        for (const word of words) {
+            if (HEALTH_SYNONYMS[word]) {
+                topics.add(word);
+                this.keywords.push(word);
+            }
+            // Check if word is in any synonym list
+            for (const [key, syns] of Object.entries(HEALTH_SYNONYMS)) {
+                if (syns.includes(word)) {
+                    topics.add(key);
+                    this.keywords.push(key);
+                }
+            }
+        }
+
+        this.topics.push(...topics);
+        // Keep only last 10 topics
+        this.topics = this.topics.slice(-10);
+        this.keywords = this.keywords.slice(-20);
+
+        // Save to localStorage
+        localStorage.setItem('health-qa-interests', JSON.stringify({
+            topics: this.topics,
+            keywords: this.keywords
+        }));
+    },
+
+    // Load interests from localStorage
+    load() {
+        const saved = localStorage.getItem('health-qa-interests');
+        if (saved) {
+            const data = JSON.parse(saved);
+            this.topics = data.topics || [];
+            this.keywords = data.keywords || [];
+        }
+    },
+
+    // Get user's top interests
+    getTopInterests(limit = 5) {
+        // Count frequency
+        const freq = {};
+        for (const topic of this.topics) {
+            freq[topic] = (freq[topic] || 0) + 1;
+        }
+        // Sort by frequency
+        return Object.entries(freq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit)
+            .map(([topic]) => topic);
+    }
+};
+
+// Find interesting facts from rabbi's lectures
+function findInterestingFacts(topicHint = null) {
+    if (!AppState.allChunks.length) return null;
+
+    let relevantChunks = AppState.allChunks;
+
+    // If we have a topic hint, filter by it
+    if (topicHint) {
+        const expandedWords = expandQueryWords([topicHint]);
+        relevantChunks = AppState.allChunks.filter(chunk => {
+            const text = (chunk.title + ' ' + chunk.text).toLowerCase();
+            return expandedWords.some(word => text.includes(word));
+        });
+    }
+
+    // If no relevant chunks, fallback to random
+    if (relevantChunks.length === 0) {
+        relevantChunks = AppState.allChunks;
+    }
+
+    // Prefer chunks with numbers, surprising facts, or strong language
+    const scoredChunks = relevantChunks.map(chunk => {
+        let score = Math.random();
+        const text = chunk.text.toLowerCase();
+
+        // Boost chunks with numbers (facts often include stats)
+        if (/\d+/.test(text)) score += 0.3;
+
+        // Boost chunks with exclamation or emphasis
+        if (/!|חשוב|מדהים|מפתיע|מיוחד/.test(text)) score += 0.2;
+
+        // Boost longer chunks (more detail)
+        if (chunk.text.length > 400) score += 0.1;
+
+        return { chunk, score };
+    });
+
+    // Sort by score and pick top candidate
+    scoredChunks.sort((a, b) => b.score - a.score);
+    const winner = scoredChunks[Math.floor(Math.random() * Math.min(5, scoredChunks.length))];
+
+    return winner ? winner.chunk : null;
+}
+
+// Display a "Did You Know" fact
+function displayDidYouKnow() {
+    const container = document.getElementById('didYouKnow');
+    if (!container) return;
+
+    // Get user's top interests
+    const interests = UserInterests.getTopInterests(3);
+    const topicHint = interests.length > 0
+        ? interests[Math.floor(Math.random() * interests.length)]
+        : null;
+
+    // Find a relevant fact
+    const fact = findInterestingFacts(topicHint);
+
+    if (!fact) {
+        document.getElementById('dykContent').textContent = 'אין עובדות זמינות כרגע...';
+        document.getElementById('dykSource').textContent = '';
+        return;
+    }
+
+    // Display the fact
+    const content = fact.text.substring(0, 300) + (fact.text.length > 300 ? '...' : '');
+    document.getElementById('dykContent').textContent = content;
+    document.getElementById('dykSource').textContent = `📖 מתוך הרצאה: ${fact.title}`;
+
+    // Show the container
+    container.style.display = 'block';
+}
+
+// Refresh with a new fact
+function refreshDidYouKnow() {
+    displayDidYouKnow();
+}
+
+// Initialize Did You Know on page load
+UserInterests.load();
+
+// Hook into sendQuestion to track interests
+const originalSendQuestion = sendQuestion;
+sendQuestion = function() {
+    const input = document.getElementById('chatInput');
+    if (input && input.value.trim()) {
+        UserInterests.analyzeQuestion(input.value.trim());
+    }
+    return originalSendQuestion.apply(this, arguments);
+};
 
 (function init() {
     // Set default API keys (encoded to avoid GitHub secret scanning)
@@ -2324,7 +2572,162 @@ function saveSettings() {
     rebuildTopics();
     renderTopicPills();
     renderStats();
+    displayDidYouKnow();
 })();
+// ==================== DID YOU KNOW (הידעת?) ====================
+
+// Track user interests based on chat history
+const UserInterests = {
+    topics: [],
+    keywords: [],
+
+    // Analyze user's questions to learn interests
+    analyzeQuestion(question) {
+        const words = question.toLowerCase().split(/\s+/);
+        const topics = new Set();
+
+        // Extract health topics from question
+        for (const word of words) {
+            if (HEALTH_SYNONYMS[word]) {
+                topics.add(word);
+                this.keywords.push(word);
+            }
+            // Check if word is in any synonym list
+            for (const [key, syns] of Object.entries(HEALTH_SYNONYMS)) {
+                if (syns.includes(word)) {
+                    topics.add(key);
+                    this.keywords.push(key);
+                }
+            }
+        }
+
+        this.topics.push(...topics);
+        // Keep only last 10 topics
+        this.topics = this.topics.slice(-10);
+        this.keywords = this.keywords.slice(-20);
+
+        // Save to localStorage
+        localStorage.setItem('health-qa-interests', JSON.stringify({
+            topics: this.topics,
+            keywords: this.keywords
+        }));
+    },
+
+    // Load interests from localStorage
+    load() {
+        const saved = localStorage.getItem('health-qa-interests');
+        if (saved) {
+            const data = JSON.parse(saved);
+            this.topics = data.topics || [];
+            this.keywords = data.keywords || [];
+        }
+    },
+
+    // Get user's top interests
+    getTopInterests(limit = 5) {
+        // Count frequency
+        const freq = {};
+        for (const topic of this.topics) {
+            freq[topic] = (freq[topic] || 0) + 1;
+        }
+        // Sort by frequency
+        return Object.entries(freq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit)
+            .map(([topic]) => topic);
+    }
+};
+
+// Find interesting facts from rabbi's lectures
+function findInterestingFacts(topicHint = null) {
+    if (!AppState.allChunks.length) return null;
+
+    let relevantChunks = AppState.allChunks;
+
+    // If we have a topic hint, filter by it
+    if (topicHint) {
+        const expandedWords = expandQueryWords([topicHint]);
+        relevantChunks = AppState.allChunks.filter(chunk => {
+            const text = (chunk.title + ' ' + chunk.text).toLowerCase();
+            return expandedWords.some(word => text.includes(word));
+        });
+    }
+
+    // If no relevant chunks, fallback to random
+    if (relevantChunks.length === 0) {
+        relevantChunks = AppState.allChunks;
+    }
+
+    // Prefer chunks with numbers, surprising facts, or strong language
+    const scoredChunks = relevantChunks.map(chunk => {
+        let score = Math.random();
+        const text = chunk.text.toLowerCase();
+
+        // Boost chunks with numbers (facts often include stats)
+        if (/\d+/.test(text)) score += 0.3;
+
+        // Boost chunks with exclamation or emphasis
+        if (/!|חשוב|מדהים|מפתיע|מיוחד/.test(text)) score += 0.2;
+
+        // Boost longer chunks (more detail)
+        if (chunk.text.length > 400) score += 0.1;
+
+        return { chunk, score };
+    });
+
+    // Sort by score and pick top candidate
+    scoredChunks.sort((a, b) => b.score - a.score);
+    const winner = scoredChunks[Math.floor(Math.random() * Math.min(5, scoredChunks.length))];
+
+    return winner ? winner.chunk : null;
+}
+
+// Display a "Did You Know" fact
+function displayDidYouKnow() {
+    const container = document.getElementById('didYouKnow');
+    if (!container) return;
+
+    // Get user's top interests
+    const interests = UserInterests.getTopInterests(3);
+    const topicHint = interests.length > 0
+        ? interests[Math.floor(Math.random() * interests.length)]
+        : null;
+
+    // Find a relevant fact
+    const fact = findInterestingFacts(topicHint);
+
+    if (!fact) {
+        document.getElementById('dykContent').textContent = 'אין עובדות זמינות כרגע...';
+        document.getElementById('dykSource').textContent = '';
+        return;
+    }
+
+    // Display the fact
+    const content = fact.text.substring(0, 300) + (fact.text.length > 300 ? '...' : '');
+    document.getElementById('dykContent').textContent = content;
+    document.getElementById('dykSource').textContent = `📖 מתוך הרצאה: ${fact.title}`;
+
+    // Show the container
+    container.style.display = 'block';
+}
+
+// Refresh with a new fact
+function refreshDidYouKnow() {
+    displayDidYouKnow();
+}
+
+// Initialize Did You Know on page load
+UserInterests.load();
+
+// Hook into sendQuestion to track interests
+const originalSendQuestion = sendQuestion;
+sendQuestion = function() {
+    const input = document.getElementById('chatInput');
+    if (input && input.value.trim()) {
+        UserInterests.analyzeQuestion(input.value.trim());
+    }
+    return originalSendQuestion.apply(this, arguments);
+};
 </script>
 </body>
 </html>
