@@ -302,6 +302,76 @@
         .mode-card .mode-icon { font-size: 1.8rem; display: block; margin-bottom: 0.4rem; }
         .mode-card .mode-label { font-weight: 600; color: var(--text); }
 
+        /* ===== DID YOU KNOW (הידעת?) ===== */
+        .did-you-know {
+            max-width: 640px;
+            margin: 2rem auto 1.5rem;
+            padding: 0 1.5rem;
+        }
+        .dyk-card {
+            background: linear-gradient(135deg, var(--primary-50) 0%, var(--accent-light) 100%);
+            border: 2px solid var(--primary);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+        .dyk-card::before {
+            content: '💡';
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            font-size: 4rem;
+            opacity: 0.15;
+        }
+        .dyk-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .dyk-icon { font-size: 1.5rem; }
+        .dyk-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+        .dyk-content {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--text);
+            margin-bottom: 1rem;
+            position: relative;
+            z-index: 1;
+        }
+        .dyk-source {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            margin-bottom: 0.8rem;
+        }
+        .dyk-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .dyk-refresh {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .dyk-refresh:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+
         .topics-section {
             max-width: 640px;
             margin: 2rem auto;
@@ -1170,6 +1240,25 @@
             <span class="mode-icon">&#128104;&#8205;&#9877;&#65039;</span>
             <span class="mode-label">שאל את הרב</span>
         </button>
+    </div>
+    <!-- הידעת? Did You Know -->
+    <div class="did-you-know" id="didYouKnow">
+        <div class="dyk-card">
+            <div class="dyk-header">
+                <span class="dyk-icon">💡</span>
+                <h3 class="dyk-title">הידעת?</h3>
+            </div>
+            <div class="dyk-content" id="dykContent">
+                לוחצים על "עובדה נוספת" לעובדות מעניינות...
+            </div>
+            <div class="dyk-source" id="dykSource"></div>
+            <div class="dyk-actions">
+                <button class="dyk-refresh" onclick="refreshDidYouKnow()">
+                    🔄 עובדה נוספת
+                </button>
+            </div>
+        </div>
+    </div>
     </div>
     <div class="topics-section">
         <h3>נושאים מהרצאות</h3>
@@ -2310,6 +2399,65 @@ function saveSettings() {
     });
 })();
 
+
+// ==================== DID YOU KNOW (הידעת?) ====================
+function findInterestingFact() {
+    if (!AppState.allChunks || AppState.allChunks.length === 0) return null;
+
+    // Score chunks for interestingness
+    const scoredChunks = AppState.allChunks.map(chunk => {
+        let score = Math.random();
+        const text = chunk.text.toLowerCase();
+
+        // Boost chunks with numbers (facts often include stats)
+        if (/\d+/.test(text)) score += 0.3;
+
+        // Boost chunks with emphasis
+        if (/!|חשוב|מדהים|מפתיע|מיוחד/.test(text)) score += 0.2;
+
+        // Boost longer chunks
+        if (chunk.text.length > 400) score += 0.1;
+
+        return { chunk, score };
+    });
+
+    // Sort and pick a random top candidate
+    scoredChunks.sort((a, b) => b.score - a.score);
+    const topCandidates = scoredChunks.slice(0, Math.min(10, scoredChunks.length));
+    const winner = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+
+    return winner ? winner.chunk : null;
+}
+
+function displayDidYouKnow() {
+    const contentEl = document.getElementById('dykContent');
+    const sourceEl = document.getElementById('dykSource');
+
+    if (!contentEl || !sourceEl) return;
+
+    const fact = findInterestingFact();
+
+    if (!fact) {
+        contentEl.textContent = 'לוחצים על "עובדה נוספת" לעובדות מעניינות...';
+        sourceEl.textContent = '';
+        return;
+    }
+
+    // Display fact (truncate if too long)
+    const maxLen = 280;
+    const content = fact.text.length > maxLen
+        ? fact.text.substring(0, maxLen) + '...'
+        : fact.text;
+
+    contentEl.textContent = content;
+    sourceEl.textContent = `📖 מתוך הרצאה: ${fact.title}`;
+}
+
+function refreshDidYouKnow() {
+    displayDidYouKnow();
+}
+
+// Initialize on data load
 (function init() {
     // Set default API keys (encoded to avoid GitHub secret scanning)
     localStorage.setItem('health-qa-gemini-key', atob('QUl6YVN5RENLWjdYY1lISmdOaFBqS1RYT0ltVkI1OWlEUFB3enFR'));
